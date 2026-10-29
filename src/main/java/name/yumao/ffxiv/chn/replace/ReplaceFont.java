@@ -6,6 +6,7 @@ import java.util.HashMap;
 import name.yumao.ffxiv.chn.builder.BinaryBlockBuilder;
 import name.yumao.ffxiv.chn.builder.TexBlockBuilder;
 import name.yumao.ffxiv.chn.model.SqPackIndex;
+import name.yumao.ffxiv.chn.model.SqPackIndex2Patcher;
 import name.yumao.ffxiv.chn.model.SqPackIndexFile;
 import name.yumao.ffxiv.chn.model.SqPackIndexFolder;
 import name.yumao.ffxiv.chn.swing.PercentPanel;
@@ -30,9 +31,15 @@ public class ReplaceFont {
         HashMap<Integer, SqPackIndexFolder> index = new SqPackIndex(outputFolder).resloveIndex();
         System.out.println("Loading Index Complete");
 
-        LERandomAccessFile leIndexFile = new LERandomAccessFile(outputFolder, "rw");
-        LERandomAccessFile leDatFile = new LERandomAccessFile(outputFolder.replace("index", "dat0"), "rw");
+        try (LERandomAccessFile leIndexFile = new LERandomAccessFile(outputFolder, "rw");
+             LERandomAccessFile leDatFile = new LERandomAccessFile(outputFolder.replace("index", "dat0"), "rw");
+             SqPackIndex2Patcher index2 = new SqPackIndex2Patcher(outputFolder)) {
+            replaceFiles(index, leIndexFile, leDatFile, index2);
+        }
+    }
 
+    private void replaceFiles(HashMap<Integer, SqPackIndexFolder> index, LERandomAccessFile leIndexFile,
+                              LERandomAccessFile leDatFile, SqPackIndex2Patcher index2) throws Exception {
         long datLength = leDatFile.length();
         leDatFile.seek(datLength);
         int fileCount = 0;
@@ -59,17 +66,21 @@ public class ReplaceFont {
                     System.out.println("Replace : " + resourceFile.getName());
                     Integer folderCRC = FFCRC.ComputeCRC(("common/font").toLowerCase().getBytes());
                     Integer fileCRC = FFCRC.ComputeCRC((resourceFile.getName()).toLowerCase().getBytes());
-                    SqPackIndexFile indexFile = index.get(folderCRC).getFiles().get(fileCRC);
+                    SqPackIndexFolder indexFolder = index.get(folderCRC);
+                    SqPackIndexFile indexFile = indexFolder == null ? null : indexFolder.getFiles().get(fileCRC);
+                    if (indexFile == null) {
+                        System.out.println("Replace Skip (not in index) : " + resourceFile.getName());
+                        continue;
+                    }
                     leIndexFile.seek(indexFile.getPt() + 8);
                     leIndexFile.writeInt((int) (datLength / 8));
+                    index2.update("common/font/" + resourceFile.getName(), (int) (datLength / 8));
                     //add dat
                     datLength += block.length;
                     leDatFile.write(block);
                 }
             }
         }
-        leDatFile.close();
-        leIndexFile.close();
     }
 
     public static void main(String[] args) throws Exception {

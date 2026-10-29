@@ -3,7 +3,7 @@ package name.yumao.ffxiv.chn.util;
 import java.io.*;
 
 @SuppressWarnings("unused")
-public final class LERandomAccessFile implements DataInput, DataOutput {
+public final class LERandomAccessFile implements DataInput, DataOutput, Closeable {
 	private static final int FIRST_COPYRIGHT_YEAR = 1999;
 	private static final String EMBEDDED_COPYRIGHT = "Copyright: (c) 1999-2013 Roedy Green, Canadian Mind Products, http://mindprod.com";
 	private final RandomAccessFile raf;

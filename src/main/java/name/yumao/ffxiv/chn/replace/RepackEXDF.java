@@ -24,6 +24,7 @@ import name.yumao.ffxiv.chn.model.EXDFFile;
 import name.yumao.ffxiv.chn.model.EXDFPage;
 import name.yumao.ffxiv.chn.model.EXHFFile;
 import name.yumao.ffxiv.chn.model.SqPackDatFile;
+import name.yumao.ffxiv.chn.model.SqPackIndex2Patcher;
 import name.yumao.ffxiv.chn.model.SqPackIndex;
 import name.yumao.ffxiv.chn.model.SqPackIndexFile;
 import name.yumao.ffxiv.chn.model.SqPackIndexFolder;
@@ -61,9 +62,17 @@ public class RepackEXDF {
         System.out.println("Loading Index File...");
         HashMap<Integer, SqPackIndexFolder> indexSE = new SqPackIndex(pathToIndexSE).resloveIndex();
         System.out.println("Loading Index Complete");
-        //準備寫入檔
-        LERandomAccessFile leIndexFile = new LERandomAccessFile(pathToIndexSE, "rw");
-        LERandomAccessFile leDatFile = new LERandomAccessFile(pathToIndexSE.replace("index", "dat0"), "rw");
+        //準備寫入檔，離開時一定會關閉
+        try (LERandomAccessFile leIndexFile = new LERandomAccessFile(pathToIndexSE, "rw");
+             LERandomAccessFile leDatFile = new LERandomAccessFile(pathToIndexSE.replace("index", "dat0"), "rw");
+             SqPackIndex2Patcher index2 = new SqPackIndex2Patcher(pathToIndexSE)) {
+            repackFiles(rootPath, indexSE, leIndexFile, leDatFile, index2);
+        }
+        System.out.println("Repack Complete");
+    }
+
+    private void repackFiles(File rootPath, HashMap<Integer, SqPackIndexFolder> indexSE, LERandomAccessFile leIndexFile,
+                             LERandomAccessFile leDatFile, SqPackIndex2Patcher index2) throws Exception {
         long datLength = leDatFile.length();
         leDatFile.seek(datLength);
         int fileCount = 0;
@@ -124,21 +133,9 @@ public class RepackEXDF {
                         if (!mergePath.exists()) {
                             continue;
                         }
-                        FileReader fileReader = new FileReader(mergePath.getAbsolutePath(), Charset.forName("UTF-8"));
-                        CSVReader importCSV = new CSVReader(fileReader);
                         //載入每行資料
                         HashMap<Integer, byte[]> jaExdList = ja_exd.getEntrys();
-                        String s[] = importCSV.readNext();
-                        // 檢查並移除 BOM
-                        if (s != null && s.length > 0 && s[0] != null && s[0].startsWith("\uFEFF")) {
-                            s[0] = s[0].replaceFirst("^\uFEFF", "");
-                        }
-                        Map<String, List<String>> csvData = new HashMap<>();
-                        while (s != null) {
-                            List<String> fileValues = Arrays.asList(s);
-                            csvData.put(fileValues.get(0), fileValues);
-                            s = importCSV.readNext();
-                        };
+                        Map<String, List<String>> csvData = readCsv(mergePath);
 
                         for (Entry<Integer, byte[]> listEntry : jaExdList.entrySet()) {
                             //編號
@@ -186,22 +183,36 @@ public class RepackEXDF {
                             // 转成byte[] 存入Map
                             listEntry.setValue(entryBody.getWork());
                         }
-                        fileReader.close();
                         // 準備好修改後的資料
                         byte[] exdfFile = new EXDFBuilder(jaExdList).buildExdf();
                         byte[] exdfBlock = new BinaryBlockBuilder(exdfFile).buildBlock();
                         // 填充資料
                         leIndexFile.seek(exdIndexFileJA.getPt() + 8);
                         leIndexFile.writeInt((int) (datLength / 8));
+                        index2.update(filePath + "/" + exdFileName, (int) (datLength / 8));
                         datLength += exdfBlock.length;
                         leDatFile.write(exdfBlock);
                     }
                 }
             }
         }
-        leDatFile.close();
-        leIndexFile.close();
-        System.out.println("Repack Complete");
+    }
+
+    private Map<String, List<String>> readCsv(File csvFile) throws Exception {
+        Map<String, List<String>> csvData = new HashMap<>();
+        try (CSVReader importCSV = new CSVReader(new FileReader(csvFile, Charset.forName("UTF-8")))) {
+            String[] s = importCSV.readNext();
+            // 檢查並移除 BOM
+            if (s != null && s.length > 0 && s[0] != null && s[0].startsWith("﻿")) {
+                s[0] = s[0].replaceFirst("^﻿", "");
+            }
+            while (s != null) {
+                List<String> fileValues = Arrays.asList(s);
+                csvData.put(fileValues.get(0), fileValues);
+                s = importCSV.readNext();
+            }
+        }
+        return csvData;
     }
 
     private void initFileList() throws Exception {
