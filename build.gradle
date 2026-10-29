@@ -3,7 +3,7 @@ plugins {
     id 'application'
     id 'java-library'
     id 'idea'
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'com.gradleup.shadow' version '9.0.0'
 }
 
 sourceSets {
@@ -21,12 +21,14 @@ dependencies {
 	implementation("com.opencsv:opencsv:5.11")
 }
 
-mainClassName = "name.yumao.ffxiv.chn.FFXIVPatchMain"
+application {
+	mainClass = "name.yumao.ffxiv.chn.FFXIVPatchMain"
+}
 
 jar {
 	manifest {
 		attributes(
-				'Main-Class': mainClassName
+				'Main-Class': application.mainClass
 		)
 	}
 }

@@ -81,7 +81,7 @@ public class RepackEXDF {
                 Integer exhFileCRC = FFCRC.ComputeCRC(fileName.toLowerCase().getBytes());
                 //透過hash搜尋路徑
                 if (indexSE.get(filePathCRC) == null) {
-                    System.out.println("Path Fail : " + filePath + File.separator + filePath);
+                    System.out.println("Path Fail : " + filePath);
                     continue;
                 }
                 //透過hash搜尋描述檔位址
@@ -104,6 +104,10 @@ public class RepackEXDF {
                         Integer exdFileCRCJA = FFCRC.ComputeCRC(exdFileName.getBytes());
                         // 透過hash搜尋資源檔位址
                         SqPackIndexFile exdIndexFileJA = indexSE.get(filePathCRC).getFiles().get(exdFileCRCJA);
+                        if (exdIndexFileJA == null) {
+                            System.out.println("Repack Skip (not in index) : " + filePath + "/" + exdFileName);
+                            continue;
+                        }
                         byte[] exdFileJA = null;
                         try {
                             //讀取資源檔
@@ -214,38 +218,6 @@ public class RepackEXDF {
             }
             fileList.add("EXD/" + (fileName.contains(",") ? fileName.split(",")[0] : fileName) + ".EXH");
         }
-    }
-
-    private static void parsePayload(LERandomBytes inBytes, LERandomBytes outBytes) {
-        int possition = inBytes.position();
-        int type = inBytes.readByte() & 0xFF;
-        int size = getBodySize((inBytes.readByte() & 0xFF), inBytes);
-        byte[] body = new byte[size - 1];
-        inBytes.readFully(body);
-        inBytes.skip();
-        long fullLength = inBytes.position() - possition + 1;
-        byte[] full = new byte[(int) fullLength];
-        inBytes.seek(possition - 1);
-        inBytes.readFully(full);
-        outBytes.write(full);
-    }
-
-    private static int getBodySize(int payloadSize, LERandomBytes inBytes) {
-        if (payloadSize < 0xF0) {
-            return payloadSize;
-        }
-        switch (payloadSize) {
-            case 0xF0:
-                return inBytes.readInt8();
-            case 0xF1:
-            case 0xF2:
-                return inBytes.readInt16();
-            case 0xFA:
-                return inBytes.readInt24();
-            case 0xFE:
-                return inBytes.readInt32();
-        }
-        return payloadSize;
     }
 
     private byte[] extractFile(String pathToIndex, long dataOffset) throws IOException {
